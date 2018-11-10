@@ -1,0 +1,499 @@
+---
+title: "Graph Parsed USDA Food Data"
+author: "Victor Jacobson"
+date: "March 21, 2017"
+output: html_document
+---
+
+#Use parsed USDA Food Data
+```{r}
+library(ggplot2)
+library(plotly)
+load("USDA_Parsed.Rdata")
+
+#Show Cholesterol by Food Categories & Preparation
+#data <-
+  ggplot(USDA_Parsed, aes(x = category, y = Cholestrl_.mg., label = Shrt_Desc)) + 
+  geom_boxplot(aes(fill = category), outlier.shape = NA) + 
+  #scale_fill_manual(values = c("Grey", "#F7C96F", "#FFF7D6", "#6E72A1", "#AA8844", "#EEBB88", "#FFEEDD"), guide = FALSE ) +
+  geom_point(aes(x = category, y = Cholestrl_.mg., color = prep), 
+             position = position_jitterdodge(dodge.width = 0.75), alpha = .75, size = 2) + 
+  scale_color_manual(values = c("#999999", "#FF2266", "#663300"), name = "Preparation") + 
+  coord_cartesian(ylim = c(0, 160)) + 
+  labs(title = "Cholesterol by Category & Preparation", x = "Category", y = "Cholesterol (mg)") +
+  theme(text = element_text(size = 20), plot.title = element_text(hjust = 0.5),
+        legend.position = c(.3, .87))
+ggplotly(data, tooltip = c("Shrt_Desc", "Cholestrl_.mg."))
+#ggsave("visuals/CholCatPrepMain.png", plot = data, device = NULL, path = NULL, scale = 1, width = 12, height = 9, units = "in", dpi = 600, limitsize = TRUE)
+```
+
+#Boxplot of categories
+```{r}
+library(ggplot2)
+library(plotly)
+library(dplyr)
+load("USDA_Parsed.Rdata")
+               
+# order categories by cholesterol mean
+category_order <- 
+  USDA_Parsed %>% 
+  group_by(category)  %>% 
+  summarise(chol_mean = median(Cholestrl_.mg., na.rm=TRUE)) %>%
+  arrange(chol_mean)
+USDA_Parsed$category <- factor(USDA_Parsed$category, levels = category_order$category)
+
+# order subcats by cholesterol mean
+subcat_order <- 
+  USDA_Parsed %>% 
+  group_by(subcat)  %>% 
+  summarise(chol_mean = median(Cholestrl_.mg., na.rm=TRUE)) %>%
+  arrange(chol_mean)
+USDA_Parsed$subcat <- factor(USDA_Parsed$subcat, levels = subcat_order$subcat)
+
+# order foods by cholesterol mean
+food_order <- 
+  USDA_Parsed %>% 
+  group_by(food)  %>% 
+  summarise(chol_mean = median(Cholestrl_.mg., na.rm=TRUE)) %>%
+  arrange(chol_mean)
+USDA_Parsed$food <- factor(USDA_Parsed$food, levels = food_order$food)
+
+# order foods by cholesterol mean
+firstword_order <- 
+  USDA_Parsed %>% 
+  group_by(first_word)  %>% 
+  summarise(chol_mean = median(Cholestrl_.mg., na.rm=TRUE)) %>%
+  arrange(chol_mean)
+USDA_Parsed$first_word <- factor(USDA_Parsed$first_word, levels = firstword_order$first_word)
+
+
+```
+
+# Main subcats and foods
+```{r}
+#Make list of subcats with cholesterol
+top_chol_foods <- filter(food_order, chol_mean > 25)$food
+
+USDA_Parsed %>% 
+  filter(food %in% top_chol_foods) %>% # filter(category_order, chol_mean > 10)$category) %>%
+  ggplot(aes(x = food, y = Cholestrl_.mg., label = Shrt_Desc)) + 
+  geom_boxplot(aes(fill = subcat)) + #, outlier.shape = NA) + 
+  coord_cartesian(ylim = c(0, 500)) + 
+  scale_fill_brewer(palette = "Set1", name = "Subcategory") + 
+  labs(title = "Foods with Highest Cholesterol", x = NULL, y = "Cholesterol (mg)") +
+  theme(axis.text.x = element_text(angle = 40, hjust = 1)) +
+  theme(text = element_text(size = 14), plot.title = element_text(hjust = 0.5),
+        legend.position = c(.15, .76), legend.background = element_rect(fill=alpha("white",0)))
+ggsave("visuals/Chol_Box_Subcats.png", device = NULL, path = NULL, scale = 1, width = 8, height = 7, units = "in", dpi = 600, limitsize = TRUE)
+```
+
+# Meat subgroup
+```{r}
+#Make list of subcats with cholesterol
+top_chol_firstword <- firstword_order %>% 
+  filter(chol_mean > 50 )$first_word
+
+USDA_Parsed %>% 
+  #filter(first_word %in% top_chol_firstword) %>%
+  filter(subcat %in% c("Meats", "Poultry","Seafood")) %>% 
+  filter( food != "Liver and organ meats") %>%
+  ggplot(aes(x = food, y = Cholestrl_.mg., label = Shrt_Desc)) + 
+  geom_boxplot(aes(fill = subcat), outlier.shape = NA) + 
+  geom_point(aes(x = food, y = Cholestrl_.mg., color = prep), 
+             position = position_jitterdodge(dodge.width = 0.75), alpha = .75, size = 2) + 
+  scale_color_manual(values = c("#999999", "#FF2266", "#663300"), name = "Preparation") + 
+  coord_cartesian(ylim = c(0, 200)) + 
+  #scale_fill_brewer(palette = "Set2", name = "Subcategory") + 
+  scale_fill_manual(values = c("#6E72A1", "#AA8844", "#EEBB88"), name = "Subcategory") +
+  labs(title = "Cholesterol in Seafood, Meat and Poultry", x = NULL, y = "Cholesterol (mg)") +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1, size = 11)) +
+  theme(text = element_text(size = 14), plot.title = element_text(hjust = 0.5))
+ggsave("visuals/Chol_BoxPoint_LandSeaAirPrep.png", device = NULL, path = NULL, scale = 1, width = 10, height = 5, units = "in", dpi = 600, limitsize = TRUE)
+```
+
+
+
+#Show Meats & Pultry
+```{r}
+meats_poultry <- USDA_Parsed[grepl("Meat|Poultry", USDA_Parsed$category),]
+
+# order food factors by median
+library(dplyr)
+mpfactor_list <- meats_poultry %>% group_by(food)  %>% summarise(chol_median = median(Cholestrl_.mg., na.rm=TRUE))
+mpfactor_list <- mpfactor_list[order(mpfactor_list$chol_median),]
+#utils::View(mpfactor_list)
+meats_poultry$food <- factor(meats_poultry$food, levels = mpfactor_list$food)
+
+ggplot(meats_poultry, aes(x = food, y = Cholestrl_.mg., label = Shrt_Desc)) + 
+  facet_grid(.~category, space = "free", scales = "free") + 
+  geom_boxplot(aes(fill = food), outlier.shape = NA) + 
+  scale_fill_brewer(palette = "Set3", guide = FALSE) + 
+  geom_point(aes(x = food, y = Cholestrl_.mg., color = prep), 
+             position = position_jitterdodge(dodge.width = 0.75), alpha = .75, size = 2) + 
+  scale_color_manual(values = c("#999999", "#FF2266", "#663300"), name = "Preparation") + 
+  coord_cartesian(ylim = c(25, 160)) + 
+  labs(title = "Cholesterol in Meats & Poultry by Preparation", x = "", y = "Cholesterol (mg)") +
+  theme(text = element_text(size = 15), plot.title = element_text(hjust = 0.5),
+        legend.position = c(.83, .16))
+ggsave("visuals/CholMeatPultryPrep.png", device = NULL, path = NULL, scale = 1, width = 9, height = 5, units = "in", dpi = 600, limitsize = TRUE)
+#ggplotly(data, tooltip = c("Shrt_Desc", "Cholestrl_.mg."))
+
+```
+
+#Breakdown all categories
+```{r}
+library(dplyr)
+library(ggplot2)
+
+all_data <- USDA_Parsed
+
+# order food factors by median
+mpfactor_list <- all_data %>% group_by(food)  %>% summarise(chol_median = median(Cholestrl_.mg., na.rm=TRUE))
+mpfactor_list <- mpfactor_list[order(mpfactor_list$chol_median),]
+#utils::View(mpfactor_list)
+all_data$subcat <- factor(all_data$food, levels = mpfactor_list$food)
+
+chol_list <- mpfactor_list %>% filter(chol_median > 20)
+
+all_data <- all_data %>% filter(food %in% chol_list$food)
+
+ggplot(all_data, aes(x = food, y = Cholestrl_.mg., label = Shrt_Desc)) + 
+  facet_grid(.~category, space = "free", scales = "free") + 
+  geom_boxplot(aes(fill = food), outlier.shape = NA) + 
+  scale_fill_discrete(guide = FALSE) + 
+  geom_point(aes(x = food, y = Cholestrl_.mg., color = prep), 
+             position = position_jitterdodge(dodge.width = 0.75), alpha = .75, size = 2) + 
+  scale_color_manual(values = c("#999999", "#FF2266", "#663300"), name = "Preparation") + 
+  coord_cartesian(ylim = c(0, 160)) + 
+  labs(title = "Cholesterol by Meats, Poultry & Preparation", x = "", y = "Cholesterol (mg)") +
+  theme(text = element_text(size = 18), plot.title = element_text(hjust = 0.5))
+ggsave("visuals/CholCatFoodPrep.png", device = NULL, path = NULL, scale = 1, width = 18, height = 7, units = "in", dpi = 600, limitsize = TRUE)
+#ggplotly(data, tooltip = c("Shrt_Desc", "Cholestrl_.mg."))
+
+```
+#Breakdown all categories2
+```{r}
+library(dplyr)
+library(ggplot2)
+
+all_data <- USDA_Parsed
+
+# order food factors by median
+mpfactor_list <- all_data %>% group_by(food)  %>% summarise(chol_median = median(Cholestrl_.mg., na.rm=TRUE))
+mpfactor_list <- mpfactor_list[order(mpfactor_list$chol_median),]
+#utils::View(mpfactor_list)
+all_data$subcat <- factor(all_data$food, levels = mpfactor_list$food)
+
+chol_list <- mpfactor_list %>% filter(chol_median > 20)
+
+all_data <- all_data %>% filter(food %in% chol_list$food)
+
+ggplot(all_data, aes(x = food, y = Cholestrl_.mg., label = Shrt_Desc)) + 
+  facet_grid(.~category, space = "free", scales = "free") + 
+  geom_boxplot(aes(fill = food), outlier.shape = NA) + 
+  scale_fill_discrete(guide = FALSE) + 
+  geom_point(aes(x = food, y = Cholestrl_.mg., color = prep), 
+             position = position_jitterdodge(dodge.width = 0.75), alpha = .75, size = 2) + 
+  scale_color_manual(values = c("#999999", "#FF2266", "#663300"), name = "Preparation") + 
+  coord_cartesian(ylim = c(0, 160)) + 
+  labs(title = "Cholesterol by Meats, Poultry & Preparation", x = "", y = "Cholesterol (mg)") +
+  theme(text = element_text(size = 18), plot.title = element_text(hjust = 0.5))
+ggsave("visuals/CholCatFoodPrep02.png", device = NULL, path = NULL, scale = 1, width = 18, height = 7, units = "in", dpi = 600, limitsize = TRUE)
+#ggplotly(data, tooltip = c("Shrt_Desc", "Cholestrl_.mg."))
+
+```
+#liverEggsBrain
+
+
+```{r}
+#beef <- USDA_Parsed[grepl("Beef", USDA_Parsed$food),]
+liverEggsBrain <- USDA_Parsed[grepl("Liver|Eggs|Brain", USDA_Parsed$food),]
+liverEggsBrain <- liverEggsBrain[!grepl(" / ", liverEggsBrain$food),]#remove hybrids
+liverEggsBrain$food <- factor(liverEggsBrain$food, levels = c("Liver", "Eggs", "Brain"))
+ggplot(liverEggsBrain, aes(x = food, y = Cholestrl_.mg., color = prep))+ 
+  geom_point(position = position_jitterdodge(dodge.width = 0.75)) + 
+  scale_color_manual(values = c("#999999", "#FF2266", "#663300"), name = "Preparation") + 
+  #coord_cartesian(ylim = c(0, 160)) + 
+  #Add line to show recommended daily value
+  geom_hline(yintercept = 300, color = "Red",linetype = "dashed") +
+  labs(title = "Highest Cholesterol Foods by Preparation", x = "", y = "Cholesterol(mg)") +
+  theme(text = element_text(size = 10), plot.title = element_text(hjust = 0.5),
+        legend.position = c(.15, .7))
+ggsave("visuals/CholLiverEggsBrainPrep.png", device = NULL, path = NULL, scale = 1, width = 4, height = 3.5, units = "in", dpi = 600, limitsize = TRUE)
+
+egg <- USDA_Parsed[grepl("Eggs", USDA_Parsed$food),]
+
+```
+
+
+#Histogram
+```{r}
+# Basic
+ggplot(USDA_Parsed, aes(Cholestrl_.mg.)) +
+  geom_histogram(binwidth = 10)+
+  labs(title = "Cholesterol Distribution", x = "Cholesterol (mg)", y = "Count") 
+ggsave("visuals/CholHistBasic.png", scale = 2, width = 3, height = 2, units = "in", dpi = 600, limitsize = TRUE)
+
+# Zoomed In
+ggplot(USDA_Parsed, aes(Cholestrl_.mg.)) +
+  geom_histogram(binwidth = 5) +
+  coord_cartesian(xlim = c(0, 260)) + 
+  labs(title = "Cholesterol Distribution", x = "Cholesterol (mg)", y = "Count")  +
+  theme(text = element_text(size = 10), plot.title = element_text(hjust = 0.5))
+ggsave("visuals/CholHistZoom.png", scale = 2, width = 3, height = 2, units = "in", dpi = 600, limitsize = TRUE)
+
+
+# Zoomed In More
+ggplot(USDA_Parsed, aes(Cholestrl_.mg.)) +
+  geom_histogram(binwidth = 5) +
+  coord_cartesian(xlim = c(20, 140), ylim = c(0, 300)) +
+  labs(title = "Cholesterol Distribution Zoom In", x = "Cholesterol (mg)", y = "Count") +
+  theme(text = element_text(size = 10), plot.title = element_text(hjust = 0.5))
+ggsave("visuals/CholHistZoomMore.png", scale = 2, width = 3, height = 2, units = "in", dpi = 600, limitsize = TRUE)
+
+
+# Scale 
+ggplot(USDA_Parsed, aes(Cholestrl_.mg., fill = category)) +
+  geom_histogram(binwidth = 5) +
+  coord_cartesian(xlim = c(20, 140), ylim = c(0, 300)) +
+  scale_fill_brewer(palette = "Accent") +
+  labs(title = "Cholesterol Distributed by Category", x = "Cholesterol (mg)", y = "Count") +
+  theme(text = element_text(size = 10), plot.title = element_text(hjust = 0.5),
+        legend.position = c(.85, .6))
+ggsave("visuals/CholHistScaleCat.png", scale = 2, width = 3, height = 2, units = "in", dpi = 600, limitsize = TRUE)
+
+
+# Scale 
+ggplot(USDA_Parsed, aes(Cholestrl_.mg., fill = prep)) +
+  geom_histogram(binwidth = 5) +
+  coord_cartesian(xlim = c(20, 140), ylim = c(0, 300))+ 
+  scale_fill_manual(values = c("#999999", "#FF2266", "#663300"), name = "Preparation") +
+  labs(title = "Cholesterol Distributed by Preparation", x = "Cholesterol (mg)", y = "Count") +
+  theme(text = element_text(size = 10), plot.title = element_text(hjust = 0.5),
+        legend.position = c(.85, .6))
+ggsave("visuals/CholHistScalePrep.png", scale = 2, width = 3, height = 2, units = "in", dpi = 600, limitsize = TRUE)
+
+```
+
+
+#Word Cloud
+```{r}
+library(tm)
+library(SnowballC)
+library(wordcloud)
+library(stringr)
+  
+# remove punctuation and stopwords (the, a, etc...)
+# cholCorpus <- tm_map(cholCorpus, replacePunctuation)
+# cholCorpus <- tm_map(cholCorpus, removeWords, stopwords('english'))
+load("USDA16.Rdata")
+USDA_Corpus <- USDA16$Shrt_Desc
+
+USDA_Corpus <- str_to_lower(USDA_Corpus)
+USDA_Corpus <- gsub(" ", "-", USDA_Corpus)
+USDA_Corpus <- gsub(",", " ", USDA_Corpus)
+#USDA_Corpus <- str_replace_all(USDA_Corpus, "ckd", " ")
+#USDA_Corpus <- str_replace_all(USDA_Corpus, "raw", " ")
+
+# create a corpus and simplify text
+USDA_Corpus <- Corpus(VectorSource(USDA_Corpus))
+USDA_Corpus <- tm_map(USDA_Corpus, PlainTextDocument)
+
+# stemming - reduce all words to root words
+# cholCorpus <- tm_map(cholCorpus, stemDocument)
+
+# Wordcloud of everything 
+png(filename = "visuals/WordCloudUSDA.png",
+    width = 600, height = 600, units = "px")
+wordcloud(USDA_Corpus, scale = c(8, 1), max.words = 150, random.order = FALSE, random.color = TRUE)
+
+
+# Wordcloud of First Words 
+USDA_Corpus <- word(short_desc)
+png(filename = "visuals/WordCloudFirstWords.png",
+    width = 600, height = 600, units = "px")
+wordcloud(USDA_Corpus, scale = c(8, 1), max.words = 150, random.order = FALSE, random.color = TRUE)
+
+
+# Test using different frequency
+wordcloud(mpfactor_list$food, freq = mpfactor_list$chol_median,
+          scale = c(4, .1), 
+          max.words = 100, random.order = FALSE, random.color = TRUE)
+
+#Create new list using first word
+
+# Reduce shortdesc to first word only
+ShrtDesc <- USDA16$Shrt_Desc
+ShrtDesc <- str_to_lower(ShrtDesc)
+ShrtDesc <- gsub("-", " ", ShrtDesc)
+ShrtDesc <- gsub(",", " ", ShrtDesc)
+ShrtDesc <- gsub(".*brain.*", "brain", ShrtDesc)
+ShrtDesc <- gsub(".*liver.*", "liver", ShrtDesc)
+ShrtDesc <- word(ShrtDesc)
+#wordcloud(ShrtDesc, max.words = 100, random.order = FALSE, random.color = TRUE)
+
+USDACholCorpus <- data.frame(ShrtDesc, Cholesterol = USDA16$Cholestrl_.mg.)
+USDACholCorpus <- USDACholCorpus[!is.na(USDACholCorpus$Cholesterol),]#Remove NA
+
+USDACholCorpus <- USDACholCorpus %>% group_by(ShrtDesc) %>% 
+                  summarise(Chol_mean = round(mean(Cholesterol, na.rm = TRUE), digits = 0), 
+                            Freq = n(), Chol_rel = round(sqrt(Freq + 5) * sqrt(Chol_mean+50), digits = 0))
+
+USDACholCorpus <- filter(USDACholCorpus, Chol_mean >= 40)#Remove Low Cholesterol
+
+
+# Size reflects mean cholesterol
+png(filename = "visuals/WordCloudCholMean.png",
+    width = 560, height = 560, units = "px")
+wordcloud(USDACholCorpus$ShrtDesc, freq = USDACholCorpus$Chol_mean,
+          scale = c(8, 1),
+          max.words = 150, random.order = FALSE, random.color = TRUE)
+
+
+
+# Size reflects Relevance
+
+# Add the word 'Cholesterol' to the word cloud
+#USDACholCorpus <- rbind(USDACholCorpus, c("Cholesterol",0,0, 800))
+#USDACholCorpus <- data.frame(USDACholCorpus[,1] , Chol_rel = as.numeric(USDACholCorpus[,4]))
+#USDACholCorpus[nrows(USDACholCorpus) + 1,] <- c("Cholesterol",0,0, 800)
+#add_row(USDA_Corpus, ShrtDesc = "Cholesterol", Chol_mean = 0, Freq = 0, Chol_rel = 800)
+c = data.frame(ShrtDesc = "cholesterol", Chol_mean = 0, Freq = 0, Chol_rel = 450)
+
+USDACholCorpus <- bind_rows(USDACholCorpus, c)
+
+png(filename = "visuals/WordCloudCholesterelevance.png",
+    width = 1200, height = 1200, units = "px")
+wordcloud(USDACholCorpus$ShrtDesc, freq = USDACholCorpus$Chol_rel,
+          scale = c(11, 2), colors = pal2,
+          max.words = 200, random.order = FALSE, random.color = TRUE)
+
+pal2 <- brewer.pal(8,"Dark2")
+
+```
+
+
+
+
+
+# Aggregate previous Graph
+```{r}
+library(dplyr)
+library(ggplot2)
+library(plotly)
+
+USDA_Parsed %>%
+  filter(category == "PROTEIN FOODS") %>% 
+  group_by(subcat, food, prep) %>%
+  summarise(chol_mean = mean(Cholestrl_.mg., rm.na = TRUE),
+            carb_mean = mean(Carbohydrt_.g., rm.na = TRUE),
+            prot_mean = mean(Protein_.g., rm.na = TRUE)) %>%
+  ggplot(aes(x = chol_mean, y = carb_mean,
+             size = prot_mean,
+               shape = prep
+             )) +
+    geom_point(position = position_jitter(width = 1, height = 0.5),
+               alpha = .75,
+               aes(color = subcat, fill = subcat)) +
+    coord_cartesian(xlim = c(0,145), ylim = c(0,25)) + 
+    scale_size(range = c(0,8)) + 
+    scale_color_manual(values = cols_proteinfoods, name = "Sub-category") +
+    scale_fill_manual(values = cols_proteinfoods, name = "Sub-category") +
+    scale_shape_manual(values = c(21, 24, 22)) + 
+    labs(title = "Carbohydrates vs Cholesterol in Protein Foods", x = "Cholesterol(mg)", y = "Carbohydrates(g)") +
+    theme(plot.title = element_text(hjust = .5))
+  ggsave("visuals/Point_CholCarbProteinPrep_Aggregated.png", scale = 2, width = 6, height = 4, units = "in", dpi = 600, limitsize = TRUE)   
+
+
+```
+#Plot CHol vs Other Cats try binhex cloud
+```{r}
+library(dplyr)
+library(ggplot2)
+library(plotly)
+
+#graph <-  
+  USDA_Parsed %>%
+  filter(category == "PROTEIN FOODS") %>% 
+  ggplot(aes(x = Cholestrl_.mg., y = Carbohydrt_.g.,
+              #size = Protein_.g.,
+              #shape = prep,
+              #label = Shrt_Desc,
+              #color = subcat
+              fill = subcat
+             )) +
+    geom_hex(binwidth = c(4,1.5)) +
+    coord_cartesian(xlim = c(0,160), ylim = c(0,40)) + 
+    #scale_size(range = c(0,8)) + 
+    #scale_color_manual(values = cols_proteinfoods, name = "Sub-category") +
+    scale_fill_manual(values = cols_proteinfoods, name = "Sub-category") +
+    #scale_shape_manual(values = c(21, 24, 22)) + 
+    labs(title = "Carbohydrates vs Cholesterol in Protein Foods", x = "Cholesterol(mg)", y = "Carbohydrates(g)") +
+    theme(plot.title = element_text(hjust = .5))
+ 
+ #ggplotly(graph, tooltip = c("Shrt_Desc", "Cholestrl_.mg.", "Protein_.g.", "Carbohydrt_.g."))
+  ggsave("visuals/Point_CholCarbProteinPrep.png", scale = 2, width = 6, height = 4, units = "in", dpi = 600, limitsize = TRUE)   
+
+  
+  
+  #facet
+    USDA_Parsed %>%
+  filter(category == "PROTEIN FOODS") %>% 
+  ggplot(aes(x = Cholestrl_.mg., y = Carbohydrt_.g.,
+              #size = Protein_.g.,
+              #shape = prep,
+              #label = Shrt_Desc,
+              #color = subcat
+              fill = subcat
+             )) +
+     # facet_wrap(~subcat) +
+    geom_hex(binwidth = c(4,1.5)) +
+    coord_cartesian(xlim = c(0,160), ylim = c(0,40)) + 
+    #scale_size(range = c(0,8)) + 
+    #scale_color_manual(values = cols_proteinfoods, name = "Sub-category") +
+    scale_fill_manual(values = cols_proteinfoods, name = "Sub-category") +
+    #scale_shape_manual(values = c(21, 24, 22)) + 
+    labs(title = "Carbohydrates vs Cholesterol in Protein Foods", x = "Cholesterol(mg)", y = "Carbohydrates(g)") +
+    theme(plot.title = element_text(hjust = .5))
+```
+
+#Plot CHol vs Other Cats Facet
+```{r}
+library(dplyr)
+library(ggplot2)
+library(plotly)
+
+col_curedmeats = "#a64d79"
+col_eggs = "#f1c232"
+col_meats = "#a61c00"
+col_plantprot = "#38761d"
+col_poultry = "#b45f06"
+col_seafood = "#3c78d8"
+cols_proteinfoods <- c(col_curedmeats, col_eggs, col_meats, col_plantprot, col_poultry, col_seafood)
+
+#graph <- 
+  USDA_Parsed %>%
+  filter(category == "PROTEIN FOODS") %>% 
+  ggplot(aes(x = Cholestrl_.mg., y = Carbohydrt_.g.,
+             size = Protein_.g.,
+             fill = subcat,
+             color = prep, 
+             shape = prep,
+             label = Shrt_Desc
+             )) +
+    facet_wrap(~subcat, strip.position = "bottom") +
+    geom_point(position = position_jitter(width = 1, height = 0.5),
+               alpha = .75) +
+    coord_cartesian(xlim = c(0,160), ylim = c(0,40)) + 
+    scale_size(range = c(0,8)) + 
+    scale_color_manual(values = cols_proteinfoods, name = "Sub-category") +
+    scale_fill_manual(values = cols_proteinfoods, name = "Sub-category") +
+    scale_shape_manual(values = c(21, 24, 22)) + 
+    labs(title = "Carbohydrates vs Cholesterol in Protein Foods", x = "Cholesterol(mg)", y = "Carbohydrates(g)") +
+    theme(plot.title = element_text(hjust = .5),
+          text = element_text(size = 16))
+ 
+ ggplotly(graph, tooltip = c("Shrt_Desc", "Cholestrl_.mg.", "Protein_.g.", "Carbohydrt_.g."))
+  ggsave("visuals/Point_CholCarbProteinPrepFacet.png", scale = 2, width = 6, height = 4, units = "in", dpi = 600, limitsize = TRUE)   
+
+```

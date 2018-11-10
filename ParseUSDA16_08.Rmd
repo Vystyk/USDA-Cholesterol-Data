@@ -1,0 +1,340 @@
+---
+title: "ParseUSDA16"
+author: "Victor Jacobson"
+date: "March 7, 2017"
+output: html_document
+---
+#Fix names into new groups
+
+```{r}
+
+#library(SnowballC)
+library(stringr)
+library(dplyr)
+
+load("USDA16.RData")
+#USDA_Parsed <- USDA_Parsed[ sort.list(USDA_Parsed$Cholestrl_.mg., decreasing = TRUE), ] 
+USDA16 <- USDA16 %>% arrange(-Cholestrl_.mg.)
+#USDA16[is.na(USDA16)] <-0
+
+# Add columns for processing data
+desc_clean = ""
+first_word = ""
+second_word = ""
+remaining_words = ""
+#Final categories
+category = "" # Broad category ex: Dairy, Meat,
+subcat = "" # Broad category ex: Dairy, Meat,
+food = "" # Cleaned up name from Shrt_Desc
+prep = "" # Cooked or raw
+
+USDA_Parsed <- 
+  data.frame(USDA16[1:2],
+  desc_clean, first_word, second_word, remaining_words,
+  category, subcat, food, prep, 
+  USDA16[48], USDA16[3:47], USDA16[49:53], stringsAsFactors = FALSE)
+
+
+gsubp <- function(c, a, b){ return(gsub(a, b, c))} # for use with %>%
+
+# Clean punction and some abbreviations
+USDA_Parsed$desc_clean <- 
+  USDA_Parsed$Shrt_Desc %>%
+  str_to_lower() %>% as.character() %>% 
+  gsubp(", ", ",") %>% # remove space after comma
+  gsubp(" |-", "_") %>%
+ # gsubp("-", "_") %>%
+  gsubp(",", " ") %>% 
+  gsubp(" / ", "/")
+
+
+# Fix abbreviations
+USDA_Parsed$desc_clean <-
+  USDA_Parsed$desc_clean %>%
+  gsubp("w/", "with") %>% 
+  gsubp("ckd", "cooked") %>% 
+  gsubp("bf", "beef")  %>% 
+  gsubp("chkn|chckn|ckn", "chicken") 
+
+
+# Create cooked or raw category
+USDA_Parsed$prep <- USDA_Parsed$desc_clean %>% 
+  paste("_") %>% # to flag for replacement
+  gsubp(".*cooked.*", "cooked") %>%
+  gsubp(".*raw.*", "raw") %>%
+  gsubp(".*_.*", "other")
+USDA_Parsed$prep <- factor(USDA_Parsed$prep, levels = c("other","raw", "cooked"))
+
+
+# Set first and second word
+USDA_Parsed$first_word <- word(USDA_Parsed$desc_clean)
+USDA_Parsed$second_word <- word(USDA_Parsed$desc_clean, 2)
+USDA_Parsed$remaining_words <- word(USDA_Parsed$desc_clean, 3, -1)
+
+
+USDA_Parsed %>% distinct(first_word) %>% nrow()
+USDA_Parsed %>% distinct(second_word) %>% nrow()
+USDA_Parsed %>% distinct(first_word,second_word) %>% nrow()
+
+save(USDA_Parsed, file = "USDA_Parsed.RData")
+
+load("USDA_Parsed.RData")
+```
+
+
+# Create category definitions
+```{r}
+
+library(dplyr)
+library(tidyr)
+library(reshape)
+
+USDA_MaincatParsdef <- USDA_Category_List_Parsing_Main_Category_parsdef_1_
+
+# Flip rows and columns
+USDA_MaincatParsdef <- USDA_MaincatParsdef %>% t() %>% data.frame()
+
+colnames(USDA_MaincatParsdef) = USDA_MaincatParsdef[1,] %>% unlist() %>% as.character()
+USDA_MaincatParsdef = USDA_MaincatParsdef[-1,]
+
+USDA_MaincatParsdef <- USDA_MaincatParsdef %>% gather()
+USDA_MaincatParsdef <- USDA_MaincatParsdef[is.na(USDA_MaincatParsdef$value) == 0,]
+
+colnames(USDA_MaincatParsdef) = c("Category", "Subcategory")
+
+save(USDA_MaincatParsdef, file = "grouplists/USDA_MaincatParsdef.RData")
+
+load("grouplists/USDA_MaincatParsdef.RData")
+
+```
+
+# Create subcategory definitions
+```{r}
+
+
+
+
+library(dplyr)
+library(tidyr)
+library(reshape)
+
+# backup USDA_SubcatParsdef so I dont have to import every time.
+USDA_SubcatParsdef_1_ <- USDA_SubcatParsdef
+
+USDA_SubcatParsdef <- USDA_SubcatParsdef_1_
+
+# Flip rows and columns
+USDA_SubcatParsdef <- USDA_SubcatParsdef %>% t() %>% data.frame()
+
+colnames(USDA_SubcatParsdef) = USDA_SubcatParsdef[1,] %>% unlist() %>% as.character()
+USDA_SubcatParsdef = USDA_SubcatParsdef[-1,]
+
+USDA_SubcatParsdef <- USDA_SubcatParsdef %>% gather()
+USDA_SubcatParsdef <- USDA_SubcatParsdef[is.na(USDA_SubcatParsdef$value) == 0,]
+
+colnames(USDA_SubcatParsdef) = c("Subcategory", "Food")
+
+save(USDA_SubcatParsdef, file = "grouplists/USDA_SubcatParsdef.RData")
+
+load("grouplists/USDA_SubcatParsdef.RData")
+
+```
+
+
+# Join Main Category and Sub Cat definitions
+```{r}
+library(dplyr)
+
+USDA_CatDef <- full_join(USDA_MaincatParsdef, USDA_SubcatParsdef, by = "Subcategory")
+
+save(USDA_CatDef, file = "grouplists/USDA_Catdef.RData")
+
+# Add search definitions in google sheets
+write.csv(USDA_CatDef, file = "grouplists/USDA_Catdef.csv")
+
+```
+
+# After editing in sheets
+```{r}
+USDA_CatDef <- USDA_Category_List_Parsing_USDA_Catdef
+USDA_CatDef$definition <- str_to_lower(USDA_CatDef$definition)
+USDA_CatDef$exclude <- ifelse(USDA_CatDef$exclude == "", NA, USDA_CatDef$exclude)
+
+save(USDA_CatDef, file = "grouplists/USDA_Catdef.RData")
+
+load("grouplists/USDA_Catdef.RData")
+
+```
+
+#Use completed category definition to assign factors in USDA_Parsed
+```{r}
+# # Set food equal to first word unless brain|liver is in clean_desc
+# 
+# USDA_Parsed$food <- 
+#   ifelse( grepl("brain", USDA_Parsed$desc_clean), "brain", USDA_Parsed$food)
+# 
+# USDA_Parsed$food <- 
+#   ifelse( grepl("liver", USDA_Parsed$desc_clean), "liver", USDA_Parsed$food)
+
+
+assign_group <- function(group, scan, name, keywords, exclude ){
+  group <- ifelse(grepl(keywords, scan) & 
+                    !grepl(ifelse(is.na(exclude),
+                                  TRUE, exclude), scan),
+                  name, group)
+  return(group)
+}
+
+
+for(i in 1:nrow(USDA_CatDef)){
+  USDA_Parsed$food <- USDA_Parsed$food %>%
+    assign_group(USDA_Parsed$first_word, 
+                 USDA_CatDef[i,'Food'], 
+                 USDA_CatDef[i,'definition'], 
+                 USDA_CatDef[i,'exclude'])
+}
+for(i in 1:nrow(USDA_CatDef)){
+  USDA_Parsed$food <- USDA_Parsed$food %>%
+    assign_group(USDA_Parsed$second_word, 
+                 USDA_CatDef[i,'Food'], 
+                 USDA_CatDef[i,'definition'], 
+                 USDA_CatDef[i,'exclude'])
+}
+for(i in 1:nrow(USDA_CatDef)){
+  USDA_Parsed$food <- USDA_Parsed$food %>%
+    assign_group(USDA_Parsed$remaining_words, 
+                 USDA_CatDef[i,'Food'], 
+                 USDA_CatDef[i,'definition'], 
+                 USDA_CatDef[i,'exclude'])
+}
+test <- USDA_Parsed %>% filter(food != "")
+
+
+# Assign subcat and category
+for(i in 1:nrow(USDA_CatDef)){
+   USDA_Parsed$subcat <- 
+     ifelse( grepl(USDA_CatDef[i,'Food'], USDA_Parsed$food),
+             USDA_CatDef[i,'Subcategory'],
+             USDA_Parsed$subcat)
+   USDA_Parsed$category <- 
+     ifelse( grepl(USDA_CatDef[i,'Subcategory'], USDA_Parsed$subcat),
+             USDA_CatDef[i,'Category'],
+             USDA_Parsed$category)
+   
+}
+
+# Convert to factors from list. Otherwise, cannot be used for graph or aggrigate
+USDA_Parsed <- USDA_Parsed %>% 
+  transform(category = unlist(category)) %>% 
+  transform(subcat = unlist(subcat)) %>% 
+  transform(food = unlist(food))
+
+save(USDA_Parsed, file = "USDA_Parsed.RData")
+
+load("USDA_Parsed.RData")
+  
+# # must equal TRUE
+# ex <- NA
+# word <- "eggo"
+# TRUE & is.na()
+# TRUE & grepl(TRUE, word)
+# TRUE & grepl(ex, word)
+# ifelse(is.na(ex), TRUE, !grepl(ex, word))
+# !grepl(ifelse(is.na(ex),TRUE, ex), word)
+# 
+# # must equal FALSE
+# ex <- "steak"
+# word <- "steak"
+# TRUE & is.na(grepl(ex, word))
+# TRUE & grepl(TRUE, word)
+# ifelse(is.na(ex), TRUE, !grepl(ex, word))
+# !grepl(ifelse(is.na(ex),TRUE, ex), word)
+# 
+# # muse equal TRUE
+# ex <- "err"
+# word <- "eggo"
+# TRUE & is.na(grepl(ex, word))
+# TRUE & grepl(TRUE, word)
+# ifelse(is.na(ex), TRUE, grepl(ex, word))
+# !grepl(ifelse(is.na(ex),TRUE, ex), word)
+```
+
+#Check for unassigned categories
+```{r}
+no_cat <- filter(USDA_Parsed, category == "")
+
+no_cat_chol <- filter(USDA_Parsed, category == "", Cholestrl_.mg. >= 30)
+
+
+no_cat %>% nrow()  
+no_cat_chol %>% nrow()
+
+
+#check eggs
+test <- USDA_Parsed %>% filter(subcat == "Eggs")
+
+```
+
+
+
+# Crunch the numbers
+```{r}
+
+
+#View cholesterol average in groups by first and second words
+data <- USDA_Parsed %>% 
+  group_by(first_word, second_word) %>% 
+  #group_by(second_word) %>% 
+  summarise(Count = n(),
+            Chol_mean = mean(Cholestrl_.mg., na.rm = TRUE))
+
+#View cholesterol average in groups by first and second words
+data <- USDA_Parsed %>% 
+  group_by( second_word, first_word) %>% 
+  summarise(Count = n(),
+            Chol_mean = mean(Cholestrl_.mg., na.rm = TRUE))
+
+
+#View cholesterol average in groups by first word and prep
+data <- USDA_Parsed %>% 
+  group_by( first_word, prep) %>% 
+  summarise(Count = n(),
+            Chol_mean = mean(Cholestrl_.mg., na.rm = TRUE))
+
+#View cholesterol average in groups by food and prep
+choldata <- USDA_Parsed %>% 
+  group_by(food) %>% 
+  summarise(Count = n(),
+            #Cholesterol
+            Chol_Raw = mean(Cholestrl_.mg.[prep == "raw"], na.rm = TRUE) %>% round(1),
+            Chol_Ckd = mean(Cholestrl_.mg.[prep == "cooked"], na.rm = TRUE) %>% round(1),
+            Chol_inc = Chol_Ckd - Chol_Raw,
+            Chol_percent = ((Chol_Ckd / Chol_Raw) - 1) %>% round(3) * 100,
+            Chol_mean = mean(Cholestrl_.mg., na.rm = TRUE) %>% round(1),
+            #Protein
+            Prot_Raw = mean(Protein_.g.[prep == "raw"], na.rm = TRUE) %>% round(1),
+            Prot_Ckd = mean(Protein_.g.[prep == "cooked"], na.rm = TRUE) %>% round(1),
+            Prot_inc = Prot_Ckd - Prot_Raw,
+            Prot_percent = ((Prot_Ckd / Prot_Raw) - 1) %>% round(3) * 100,
+            Prot_mean = mean(Protein_.g., na.rm = TRUE) %>% round(1)) %>%
+  arrange(-Chol_percent)
+
+```
+
+
+
+
+```{r}
+#Generate random sample of short desc
+
+USDA_Rnd <- filter(USDA_Parsed,category != "")
+length <- nrow(USDA_Rnd)
+USDA_Rnd <- USDA_Rnd[sample(1:length, length, replace = FALSE),]
+
+
+
+
+
+```
+
+
